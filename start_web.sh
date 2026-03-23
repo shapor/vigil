@@ -110,54 +110,22 @@ else
     fi
 fi
 
-# Check and start PostgreSQL database
-echo ""
-echo "Checking PostgreSQL database..."
-if command -v docker &> /dev/null; then
-    if docker ps --format '{{.Names}}' | grep -q "deeptempo-postgres"; then
-        echo "✓ PostgreSQL is already running"
-    else
-        echo "Starting PostgreSQL..."
-        cd docker
-        docker-compose up -d postgres
-        cd ..
-        
-        echo "Waiting for PostgreSQL..."
-        for i in {1..30}; do
-            if docker exec deeptempo-postgres pg_isready -U postgres &> /dev/null 2>&1; then
-                echo "✓ PostgreSQL is ready!"
-                break
-            fi
-            if [ $i -eq 30 ]; then
-                echo "⚠️  PostgreSQL may not be ready"
-            fi
-            sleep 1
-        done
-    fi
+# Load shared helpers (docker compose detection, ensure_service, etc.)
+source scripts/lib.sh
+parse_service_ports
 
-    # Start Redis (LLM job queue)
-    if docker ps --format '{{.Names}}' | grep -q "deeptempo-redis"; then
-        echo "✓ Redis is already running"
-    else
-        echo "Starting Redis (LLM job queue)..."
-        cd docker
-        docker-compose up -d redis
-        cd ..
-        echo "Waiting for Redis..."
-        sleep 2
-        echo "✓ Redis started"
-    fi
-    
-    # Initialize default admin user
-    echo ""
-    echo "Initializing default admin user..."
-    python3 scripts/init_default_user.py || {
-        echo "⚠️  Could not initialize default user."
-        echo "   If PostgreSQL just started, it may need a moment. The user may already exist."
-    }
-else
-    echo "⚠️  Docker not found. Database functionality limited."
-fi
+ensure_service "PostgreSQL" "$DB_PORT" "postgres" "POSTGRES_PORT" "deeptempo-postgres" \
+    "docker exec deeptempo-postgres pg_isready -U deeptempo -d deeptempo_soc"
+
+ensure_service "Redis" "$REDIS_PORT_NUM" "redis" "REDIS_PORT" "deeptempo-redis"
+
+# Initialize default admin user
+echo ""
+echo "Initializing default admin user..."
+python3 scripts/init_default_user.py || {
+    echo "⚠️  Could not initialize default user."
+    echo "   If PostgreSQL just started, it may need a moment. The user may already exist."
+}
 
 # Check and install frontend dependencies
 echo ""
